@@ -12,7 +12,11 @@ pub struct ReqClient {
 
 impl ReqClient {
     pub fn new() -> Self {
-        Self { client: Client::new(), api_key: env::var("API_KEY").unwrap(), url:  "https://invaders-server.herokuapp.com/".to_string()}
+        let api_key = match env::var("API_KEY") {
+            Ok(key) => key,
+            Err(_) => String::new()
+        };
+        Self { client: Client::new(), api_key, url:  "https://invaders-server.herokuapp.com/".to_string()}
     }
     pub async fn get_scores(&self) -> Result<Vec<SystemPlayer>, Box<dyn Error>> {
         let response = match self.client.get(self.url.as_str())
