@@ -1,0 +1,16 @@
+[package]
+name = "invaders"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+crossterm = "0.17.5"
+lazy_static = "1.4.0"
+reqwest = "0.11.14"
+rodio = "0.17.1"
+rusty_time = "0.11.0"
+serde = {version = "1.0.152", features = ["derive"]}
+serde_json = "1.0.93"
+tokio = {version = "1.25.0", features = ["full"]}
