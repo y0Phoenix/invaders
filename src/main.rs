@@ -7,6 +7,7 @@ use crossterm::terminal::EnterAlternateScreen;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    dotenv::dotenv().ok();
     // initialize audio
     let (_stream, stream_handle) = OutputStream::try_default().unwrap();
     let mut audio = Audio::new(stream_handle);
@@ -56,7 +57,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
        2: Leaderboard\n
        3: How To Play\n
        4: Exit";
-            let main_menu = NewMenu::new(text, 6, 5);
+            let main_menu = NewMenu::new(text.to_string(), 6, 5);
             'mainmenu: loop {
                 let mut curr_frame = frame::new_frame();
                 while event::poll(Duration::default())? {
@@ -107,7 +108,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     valid_name = player.get_name();
                     render(&mut stdout, &curr_frame, &curr_frame, true);
                 }
-                let score_display = NewMenu::new(Box::leak(("Level: ".to_string() + &player.level.to_string() + " Score: " + &player.score.to_string()).into_boxed_str()) , 8, 0);
+                let score_str = format!("Level: {}, Score: {}", player.level, player.score);
+                let score_display = NewMenu::new(score_str, 8, 0);
                 // Input
                 while event::poll(Duration::default())? {
                     if let Event::Key(key_event) = event::read()? {
@@ -168,7 +170,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 Ok(str) => str,
                 Err(e) => e.to_string()
             };
-            let beat_score_display = NewMenu::new(Box::leak(text.into_boxed_str()), 5, 10);
+            let beat_score_display = NewMenu::new(text, 5, 10);
 
             'endgame: loop {
                 let mut curr_frame = frame::new_frame();
@@ -200,7 +202,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 },
                 Err(e) => format!("{}", e)
             };
-            let leaderboard_menu = NewMenu::new(Box::leak(text.into_boxed_str()), 5, 2);
+            let leaderboard_menu = NewMenu::new(text, 5, 2);
 
             'leaderboard: loop {
                 let mut curr_frame = frame::new_frame();
@@ -225,7 +227,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let text = 
             "How To Play\n
  Movement: WASD/Arrow Keys\n
- Shoot: Spacebar";
+ Shoot: Spacebar".to_string();
             let help_menu = NewMenu::new(text, 12, 2);
             'help: loop {
                 let mut curr_frame = frame::new_frame();

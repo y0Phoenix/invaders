@@ -104,7 +104,7 @@ impl Player {
 impl Drawable for Player {
     fn draw(&self, frame: &mut crate::frame::Frame) {
         // draw player
-        frame[self.x][self.y] = "A";
+        frame[self.x][self.y] = "A".to_string();
         // draw shots
         for shot in self.shots.iter() {
             shot.draw(frame);

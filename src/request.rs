@@ -16,7 +16,9 @@ impl ReqClient {
             Ok(key) => key,
             Err(_) => String::new()
         };
-        Self { client: Client::new(), api_key, url:  "https://invaders-server.herokuapp.com/".to_string()}
+        // let url = "https://invaders-server.herokuapp.com/".to_string();
+        let url = "http://127.0.1.0:3000".to_string();
+        Self { client: Client::new(), api_key, url}
     }
     pub async fn get_scores(&self) -> Result<Vec<SystemPlayer>, Box<dyn Error>> {
         let response = match self.client.get(self.url.as_str())
@@ -31,7 +33,7 @@ impl ReqClient {
 
         let high_scores = match serde_json::from_str::<Vec<SystemPlayer>>(&body) {
             Ok(scores) => scores,
-            Err(_) => return Err("error while parsing body".into())
+            Err(_) => return Err(body.into())
         };
         Ok(high_scores)
     }

@@ -9,13 +9,13 @@ pub enum Menu {
 }
 
 pub struct NewMenu {
-    text: &'static str,
+    text: String,
     x: usize,
     y: usize
 }
 
 impl NewMenu {
-    pub fn new(text: &'static str, x: usize, y: usize) -> Self {
+    pub fn new(text: String, x: usize, y: usize) -> Self {
         Self { text, x, y }
     }
 }
@@ -46,20 +46,8 @@ impl Drawable for NewMenu {
             }
             else {
                 new_line = false;
-                frame[x][y] = Box::leak(c.to_string().into_boxed_str());
+                frame[x][y] = c.to_string();
             }
         }
-    }
-}
-
-pub struct Msg {
-    pub text: &'static str,
-    pub x: usize,
-    pub y: usize
-}
-
-impl Drawable for Msg {
-    fn draw(&self, frame: &mut Frame) {
-        frame[self.x][self.y] = self.text;
     }
 }
