@@ -1,22 +1,36 @@
-use std::{fs::{File}, error::Error, io::{Read, self, BufReader}, collections::HashMap, thread::{JoinHandle, self}, sync::{mpsc::{Sender, self}, Arc, Mutex}};
-use rodio::{Decoder,Sink, OutputStreamHandle};
-use serde::{Serialize, Deserialize};
+use rodio::{mixer::Mixer, Decoder, Player};
+use serde::{Deserialize, Serialize};
 use serde_json;
+use std::{
+    collections::HashMap,
+    error::Error,
+    fs::File,
+    io::{self, Read},
+    sync::{
+        mpsc::{self, Sender},
+        Arc, Mutex,
+    },
+    thread::{self, JoinHandle},
+};
 
 pub const AUDIO_THREAD_COUNT: u32 = 4;
 
-use crate::{menu::Menu};
+use crate::menu::Menu;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SystemPlayer {
     pub name: String,
     pub score: u32,
-    pub is: String
+    pub is: String,
 }
 
 impl SystemPlayer {
     pub fn new(name: String) -> Self {
-        Self { name, score: 0, is: "score".to_string() }
+        Self {
+            name,
+            score: 0,
+            is: "score".to_string(),
+        }
     }
 }
 
@@ -28,39 +42,31 @@ pub struct System {
 
 impl System {
     pub fn new() -> Self {
-        Self { 
-            menu: Menu::Main, player: 
-            SystemPlayer::new("new player".to_string()), 
+        Self {
+            menu: Menu::Main,
+            player: SystemPlayer::new("new player".to_string()),
             high_scores: Vec::new(),
         }
     }
     pub fn read_data(&mut self) -> Result<bool, Box<dyn Error>> {
-        let mut file = match File::open("data/scores.json") {
-            Ok(file) => file,
-            Err(e) => return Err(Box::new(e)),
-        };
+        let mut file = File::open("data/scores.json")?;
         let mut contents = String::new();
-        match file.read_to_string(&mut contents) {
-            Ok(data) => data,
-            Err(e) => return Err(Box::new(e))
-        };
-        let data: Vec<SystemPlayer> = match serde_json::from_str(&contents) {
-            Ok(data) => data,
-            Err(e) => return Err(Box::new(e))
-        };
+        file.read_to_string(&mut contents)?;
+        let data: Vec<SystemPlayer> = serde_json::from_str(&contents)?;
         self.high_scores = data;
         Ok(true)
     }
     pub fn get_menu_input(&mut self) {
         let mut input = String::new();
-        io::stdin().read_line(&mut input).expect("Failed To Get User Input");
-        input.trim().to_string();
-        match input.as_str() {
+        io::stdin()
+            .read_line(&mut input)
+            .expect("Failed To Get User Input");
+        match input.trim() {
             "Main" => self.menu = Menu::Main,
             "Game" => self.menu = Menu::Game,
             "Help" => self.menu = Menu::Help,
             "Scores" => self.menu = Menu::Leaderboard,
-            _ => println!("Invalid Menu Input")
+            _ => println!("Invalid Menu Input"),
         }
     }
 }
@@ -68,13 +74,13 @@ impl System {
 pub struct AudioThread {
     handle: JoinHandle<()>,
     tx: Sender<Arc<AudioChannel>>,
-    is_playing: Arc<Mutex<bool>>
+    is_playing: Arc<Mutex<bool>>,
 }
 
 fn get_ready_thread(threads: &Vec<AudioThread>) -> Option<usize> {
     for (i, t) in threads.iter().enumerate() {
         if *t.is_playing.lock().unwrap() == false {
-            return  Some(i);
+            return Some(i);
         }
     }
     None
@@ -82,7 +88,7 @@ fn get_ready_thread(threads: &Vec<AudioThread>) -> Option<usize> {
 
 pub struct AudioChannel {
     file: &'static str,
-    stop: bool
+    stop: bool,
 }
 
 pub struct Audio {
@@ -92,7 +98,9 @@ pub struct Audio {
 }
 
 impl Audio {
-    pub fn new(stream: OutputStreamHandle) -> Self {
+    /// `mixer` comes from the device sink opened in main:
+    /// `rodio::DeviceSinkBuilder::open_default_sink()?.mixer().clone()`
+    pub fn new(mixer: Mixer) -> Self {
         let (tx, rx) = mpsc::channel::<AudioChannel>();
         let handle = thread::spawn(move || {
             // initialize seperate threads
@@ -100,8 +108,8 @@ impl Audio {
             for _ in 0..AUDIO_THREAD_COUNT {
                 // initilize channel
                 let (tx, rx) = mpsc::channel::<Arc<AudioChannel>>();
-                // initilize sink
-                let sink = Sink::try_new(&stream).unwrap();
+                // initilize player (formerly Sink)
+                let player = Player::connect_new(&mixer);
                 // initilize is_playing to determine if the thread is playing a sound
                 let is_playing = Arc::new(Mutex::new(false));
                 let is_playing_clone = Arc::clone(&is_playing);
@@ -112,27 +120,30 @@ impl Audio {
                         match rx.recv() {
                             Ok(data) => {
                                 if data.stop {
-                                    sink.stop()
-                                }
-                                else {
-                                    let file = File::open(data.file).expect(format!("Failed To Open File {}", data.file).as_str());
-                                    let buf = BufReader::new(file);
-                                    let source: Decoder<BufReader<File>> = Decoder::new(buf).unwrap();
+                                    player.stop()
+                                } else {
+                                    let file = File::open(data.file).expect(
+                                        format!("Failed To Open File {}", data.file).as_str(),
+                                    );
+                                    let source = Decoder::try_from(file).unwrap();
                                     *is_playing.lock().unwrap() = true;
-                                    sink.append(source);
-                                    sink.sleep_until_end();
-                                    *is_playing.lock().unwrap() = false;           
+                                    player.append(source);
+                                    player.sleep_until_end();
+                                    *is_playing.lock().unwrap() = false;
                                 }
                             }
-                            Err(_) => break
+                            Err(_) => break,
                         }
                     }
                 });
                 // push the data to the thread management Vector
-                threads.push(AudioThread { handle, tx, is_playing });
+                threads.push(AudioThread {
+                    handle,
+                    tx,
+                    is_playing,
+                });
             }
             loop {
-                // thread::sleep(Duration::from_millis(1));
                 match rx.recv() {
                     Ok(data) => {
                         let data = Arc::new(data);
@@ -141,17 +152,12 @@ impl Audio {
                                 let data = Arc::clone(&data);
                                 let _ = t.tx.send(data);
                             }
+                        } else if let Some(i) = get_ready_thread(&threads) {
+                            let t = threads.get(i).unwrap();
+                            let _ = t.tx.send(data);
                         }
-                        else {
-                            // println!("hit spacebar");
-                            if let Some(i) = get_ready_thread(&threads) {
-                                let t = threads.get(i).unwrap();
-                                let _ = t.tx.send(data);
-                                
-                            }
-                        }
-                    },
-                    Err(_) => break
+                    }
+                    Err(_) => break,
                 }
             }
             for t in threads.into_iter() {
@@ -159,7 +165,7 @@ impl Audio {
                 t.handle.join().unwrap();
             }
         });
-        Self { 
+        Self {
             files: HashMap::new(),
             thread_handle: handle,
             audio_tx: tx,
@@ -172,11 +178,14 @@ impl Audio {
 
     pub fn play(&mut self, key: &'static str) {
         let file = self.files.get(key).expect("Invalid Audio Name");
-        let _ = self.audio_tx.send(AudioChannel { file: file, stop: false });
+        let _ = self.audio_tx.send(AudioChannel { file, stop: false });
     }
 
     pub fn stop(&mut self) {
-        let _ = self.audio_tx.send(AudioChannel { file: "nothing", stop: true });
+        let _ = self.audio_tx.send(AudioChannel {
+            file: "nothing",
+            stop: true,
+        });
     }
     pub fn close(self) {
         drop(self.audio_tx);
